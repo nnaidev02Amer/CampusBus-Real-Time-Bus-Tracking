@@ -174,6 +174,7 @@ export async function location(req, res, next) {
         heading: bus.currentLocation.heading,
         accuracy: bus.currentLocation.accuracy,
         timestamp: bus.currentLocation.timestamp,
+        source: bus.currentLocation.source || "driver-gps",
       },
       status: bus.status,
       lastUpdated: bus.lastUpdated,

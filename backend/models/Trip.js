@@ -9,8 +9,17 @@ const schema = new mongoose.Schema({
   routeId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Route",
-    required: true,
+    // Prototype test trips may run on a bus that has no route assigned.
+    required: function () {
+      return !this.isTest;
+    },
   },
+  // true => simulated "test mode" trip started by a driver; only simulated
+  // locations are accepted for it and real GPS is rejected.
+  isTest: { type: Boolean, default: false },
+  // GPS-health state used to notify students only when it CHANGES (not on every update).
+  signalLost: { type: Boolean, default: false },
+  signalLostCount: { type: Number, default: 0 },
   shift: { type: String, enum: ["morning", "evening"], default: "morning" },
   status: { type: String, enum: ["active", "ended"], default: "active" },
   startedAt: { type: Date, default: Date.now },

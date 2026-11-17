@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
+  RefreshCw,
   Bell,
   BusFront,
   Clock3,
@@ -18,6 +20,8 @@ import {
 } from "lucide-react";
 import Layout from "../components/Layout";
 import MapView from "../components/MapView";
+import JourneySummary from "../components/JourneySummary";
+import { journeyForShift } from "../utils/routePath";
 import StatusBadge from "../components/StatusBadge";
 import { busApi, routeApi } from "../services/api";
 import { useBusSocket } from "../hooks/useBusSocket";
@@ -188,6 +192,12 @@ function findRouteProgress(stops, location) {
 
 export default function StudentDashboard() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const requestedBusId = searchParams.get("bus");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [alertMsg, setAlertMsg] = useState("");
   const [buses, setBuses] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [busId, setBusId] = useState("");
@@ -206,13 +216,30 @@ export default function StudentDashboard() {
   }, []);
 
   useEffect(() => {
-    Promise.all([busApi.list(), routeApi.list()]).then(([b, r]) => {
-      setBuses(b.data.buses);
-      setRoutes(r.data.routes);
-      const preferred = user.assignedBusId || b.data.buses[0]?._id;
-      setBusId(preferred || "");
-    });
-  }, [user]);
+    let cancelled = false;
+    setLoading(true);
+    setLoadError("");
+    Promise.all([busApi.list(), routeApi.list()])
+      .then(([b, r]) => {
+        if (cancelled) return;
+        setBuses(b.data.buses);
+        setRoutes(r.data.routes);
+        const ids = b.data.buses.map((x) => x._id);
+        const preferred = [requestedBusId, user.assignedBusId].find((id) => id && ids.includes(id));
+        setBusId(preferred || b.data.buses[0]?._id || "");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadError(
+          err.response?.data?.message ||
+            "Could not load buses and routes. Check that the backend is running.",
+        );
+      })
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [user, requestedBusId, reloadKey]);
 
   useEffect(() => {
     setData(null);
@@ -230,6 +257,7 @@ export default function StudentDashboard() {
         speed: loc?.speed ?? null,
         heading: loc?.heading ?? null,
         accuracy: loc?.accuracy ?? null,
+        source: loc?.source ?? null,
         timestamp: loc?.timestamp ?? res.data.lastUpdated ?? null,
         status: res.data.status,
         lastUpdated: res.data.lastUpdated,
@@ -289,6 +317,8 @@ export default function StudentDashboard() {
   const isEvening = shift === "evening";
   const routeStops = (isEvening && route?.eveningStops?.length ? route.eveningStops : (route?.stops || [])).filter(Boolean);
   const scheduledStops = (isEvening && route?.eveningScheduledStops?.length ? route.eveningScheduledStops : (route?.scheduledStops || [])).filter(Boolean);
+
+  const journey = journeyForShift(route, shift);
 
   const isTripActiveForShift = Boolean(
     data?.activeTrip &&
@@ -393,9 +423,21 @@ export default function StudentDashboard() {
   const etaNextIndex = isLiveTrackingActive
     ? stops.findIndex((stop) => stop._id && data?.etaByStop?.[stop._id])
     : -1;
+  // With a road path the backend tracks progress along the road and reports
+  // nextStopIndex === stops.length once every stop is behind the bus; honour that
+  // instead of falling back to straight-segment geometry (which can regress on
+  // routes that double back).
+  const allStopsPassed =
+    journey.pathStatus === "ok" &&
+    isLiveTrackingActive &&
+    journey.stops.length > 0 &&
+    Number.isFinite(data?.nextStopIndex) &&
+    data.nextStopIndex >= journey.stops.length;
   const nextStopIndex = (!isLiveTrackingActive || stopLocationUnavailable)
     ? -1
-    : reportedNextStopIndex >= 0
+    : allStopsPassed
+      ? -1
+      : reportedNextStopIndex >= 0
       ? reportedNextStopIndex
       : isStopped && currentStopIndex >= 0
         ? Math.min(stops.length - 1, currentStopIndex + 1)
@@ -490,6 +532,39 @@ export default function StudentDashboard() {
     }
   }, [isLiveTrackingActive, data, selected, bus?.busNumber]);
 
+  if (loading || loadError || !buses.length) {
+    return (
+      <Layout>
+        <div className="grid min-h-64 place-items-center rounded-2xl border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
+          {loading ? (
+            <div className="flex flex-col items-center gap-3 text-slate-500">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+              <p className="text-sm font-semibold">Loading your bus…</p>
+            </div>
+          ) : loadError ? (
+            <div>
+              <AlertTriangle className="mx-auto text-amber-500" size={28} />
+              <p className="mt-3 font-bold">{loadError}</p>
+              <button
+                type="button"
+                onClick={() => setReloadKey((k) => k + 1)}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white dark:bg-blue-600"
+              >
+                <RefreshCw size={14} /> Retry
+              </button>
+            </div>
+          ) : (
+            <div>
+              <BusFront className="mx-auto text-slate-300" size={28} />
+              <p className="mt-3 font-bold">No buses available yet</p>
+              <p className="mt-1 text-sm text-slate-500">Buses will appear here once an admin adds them.</p>
+            </div>
+          )}
+        </div>
+      </Layout>
+    );
+  }
+
   return (
     <Layout>
       <div className="space-y-5">
@@ -520,7 +595,7 @@ export default function StudentDashboard() {
               >
                 {buses.map((item) => (
                   <option key={item._id} value={item._id}>
-                    {item.busNumber} · {routes.find((r) => r._id === item.routeId)?.name || "Route"}
+                    {item.busNumber} · {item.routeId?.name || routes.find((r) => r._id === item.routeId)?.name || "Route"}
                   </option>
                 ))}
               </select>
@@ -594,6 +669,14 @@ export default function StudentDashboard() {
                   <p className="text-xs font-semibold uppercase text-slate-400">
                     {shift === "evening" ? "Evening Return Route" : "Morning Pickup Route"}
                   </p>
+                  {isLiveTrackingActive && data?.source === "simulator" && (
+                    <span
+                      data-testid="student-test-badge"
+                      className="rounded-lg bg-fuchsia-600 px-2 py-0.5 text-[10px] font-black uppercase text-white"
+                    >
+                      TEST MODE · SIMULATED GPS
+                    </span>
+                  )}
                 </div>
                 <h2 className="mt-1 truncate text-lg font-black text-slate-900 dark:text-white">
                   {route?.direction || route?.name || "No route assigned"}
@@ -621,14 +704,63 @@ export default function StudentDashboard() {
               </div>
             </div>
 
+            <JourneySummary
+              route={route}
+              shift={shift}
+              live={isLiveTrackingActive ? data : null}
+              nextStopName={nextStop?.label || ""}
+            />
+
             {trackingView === "map" ? (
-              <div className="h-[55vh] min-h-[360px]">
-                <MapView
-                  location={isLiveTrackingActive ? data : null}
-                  stops={routeStops}
-                  route={routeStops}
-                  selectedStopId={selected?._id}
-                />
+              <div>
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-xs font-semibold ${
+                    isGpsStale
+                      ? "bg-amber-50 text-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+                      : isLiveTrackingActive
+                        ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300"
+                        : "bg-slate-50 text-slate-600 dark:bg-slate-800/50 dark:text-slate-300"
+                  }`}
+                >
+                  <span className="font-bold">
+                    {isGpsStale
+                      ? "Signal lost – showing last known position"
+                      : isLiveTrackingActive
+                        ? data?.source === "simulator"
+                          ? "TEST MODE · SIMULATED GPS"
+                          : "Live GPS"
+                        : hasBackendConfirmedTripEnd
+                          ? "Trip ended"
+                          : "Bus offline – no active trip"}
+                  </span>
+                  {(isLiveTrackingActive || isGpsStale) && ageSeconds != null && (
+                    <span>Updated {ageSeconds < 60 ? `${ageSeconds}s` : `${Math.round(ageSeconds / 60)} min`} ago</span>
+                  )}
+                  {isLiveTrackingActive && Number.isFinite(data?.latitude) && (
+                    <span>
+                      {data.latitude.toFixed(5)}, {data.longitude.toFixed(5)}
+                      {Number.isFinite(data?.accuracy) && data.source !== "simulator" ? ` · ±${Math.round(data.accuracy)} m` : ""}
+                    </span>
+                  )}
+                  <span className="ml-auto">
+                    Connection: {connection === "connected" ? "connected" : connection === "error" ? "error" : "reconnecting…"}
+                  </span>
+                </div>
+                <div className="h-[55vh] min-h-[360px]">
+                  <MapView
+                    location={isLiveTrackingActive || (isGpsStale && Number.isFinite(data?.latitude)) ? data : null}
+                    stale={isGpsStale && !isLiveTrackingActive}
+                    start={journey.start}
+                    destination={journey.destination}
+                    roadPath={journey.path}
+                    pathStatus={journey.pathStatus}
+                    stops={routeStops}
+                    route={routeStops}
+                    selectedStopId={selected?._id}
+                  />
+                </div>
               </div>
             ) : stops.length ? (
               <div className="p-3 sm:p-5">
@@ -953,13 +1085,23 @@ export default function StudentDashboard() {
               </p>
               <button
                 type="button"
-                onClick={() => {
-                  if ("Notification" in window) Notification.requestPermission();
+                onClick={async () => {
+                  if (!("Notification" in window)) {
+                    setAlertMsg("This browser does not support notifications.");
+                    return;
+                  }
+                  const result = await Notification.requestPermission();
+                  setAlertMsg(
+                    result === "granted"
+                      ? "Alerts enabled for your selected stop."
+                      : "Notifications are blocked. Allow them in browser settings to get alerts.",
+                  );
                 }}
-                className="mt-3 text-sm font-bold text-blue-700 hover:text-blue-900 dark:text-blue-400"
+                className="mt-3 inline-flex min-h-10 items-center text-sm font-bold text-blue-700 hover:text-blue-900 dark:text-blue-400 lg:min-h-0"
               >
                 Enable alerts
               </button>
+              {alertMsg && <p className="mt-2 text-xs text-slate-500" role="status">{alertMsg}</p>}
               {selected && (
                 <div className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800 space-y-1">
                   <p>

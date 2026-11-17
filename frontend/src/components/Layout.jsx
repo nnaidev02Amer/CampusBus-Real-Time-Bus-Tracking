@@ -12,6 +12,7 @@ import {
 import { useAuth } from "../hooks/useAuth";
 import { InstallPwaButton } from "./PwaInstallPrompt";
 import ThemeToggle from "./ThemeToggle";
+import NotificationBell from "./NotificationBell";
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth();
@@ -70,6 +71,7 @@ export default function Layout({ children }) {
 
           <div className="flex items-center gap-2 sm:gap-3">
             <InstallPwaButton variant="header" />
+            {user?.role === "student" && <NotificationBell />}
             <ThemeToggle />
 
             {/* Profile Avatar Button */}
@@ -102,9 +104,9 @@ export default function Layout({ children }) {
             </Link>
 
             <button
-              onClick={() => {
-                logout();
-                navigate("/login");
+              onClick={async () => {
+                await logout();
+                navigate("/login", { replace: true });
               }}
               className="rounded-xl p-2 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition"
               title="Logout"
@@ -141,13 +143,13 @@ export default function Layout({ children }) {
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 flex border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 backdrop-blur md:hidden">
-        {nav.slice(0, 5).map(([to, label, Icon]) => (
+      <nav className="fixed bottom-0 left-0 right-0 z-50 flex overflow-x-auto border-t border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 p-2 backdrop-blur md:hidden">
+        {nav.map(([to, label, Icon]) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex flex-1 flex-col items-center gap-1 rounded-xl py-2 text-[10px] font-semibold transition ${
+              `flex min-w-16 flex-1 flex-col items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-semibold transition ${
                 isActive
                   ? "text-blue-600 dark:text-blue-400"
                   : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"

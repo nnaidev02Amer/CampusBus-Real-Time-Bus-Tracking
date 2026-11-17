@@ -43,6 +43,7 @@ export function AdminUsers({ role, title }) {
   };
 
   useEffect(() => {
+    setActionError("");
     loadUsers().catch(() =>
       setListError(
         "Unable to load users. Check your connection and try again.",
@@ -235,19 +236,19 @@ export function AdminUsers({ role, title }) {
           </p>
         )}
         {role === "driver" ? (
-          <AdminTable>
-            <thead>
+          <AdminTable stackOnMobile>
+            <thead className="hidden lg:table-header-group">
               <tr className="border-b bg-slate-50 text-xs uppercase text-slate-500">
                 <th className="p-4">Driver</th>
                 <th>Email</th>
-                <th>Account</th>
+                <th className="pr-4">Account</th>
                 <th>Bus assignment</th>
                 <th>Current trip</th>
                 <th>Last activity</th>
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="block lg:table-row-group">
               {users.map((driver) => {
                 const assignedBusId = driver.assignedBus?._id || "";
                 const selectedBusId =
@@ -268,22 +269,30 @@ export function AdminUsers({ role, title }) {
                 });
 
                 return (
-                  <tr key={driver._id} className="border-b last:border-0">
-                    <td className="p-4">
+                  <tr
+                    key={driver._id}
+                    className="grid grid-cols-2 gap-x-3 gap-y-3 border-b p-4 last:border-0 lg:table-row lg:p-0"
+                  >
+                    <td className="lg:table-cell lg:p-4">
                       <p className="font-bold text-slate-900">{driver.name}</p>
                       <p className="mt-0.5 text-xs text-slate-500">
                         {driver.phone || "No phone"}
                       </p>
                     </td>
-                    <td className="whitespace-nowrap pr-4">{driver.email}</td>
-                    <td>
+                    <td className="col-span-2 min-w-0 break-words text-sm lg:col-span-1 lg:table-cell lg:whitespace-nowrap lg:pr-4">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Email</span>
+                      {driver.email}
+                    </td>
+                    <td className="lg:table-cell lg:pr-4">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Account</span>
                       <span
                         className={`rounded-full px-2.5 py-1 text-xs font-bold ${driver.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}
                       >
                         {driver.isActive ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td className="min-w-64 py-3 pr-4">
+                    <td className="col-span-2 lg:table-cell lg:min-w-64 lg:py-3 lg:pr-4">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Bus assignment</span>
                       <p className="font-semibold">
                         {driver.assignedBus?.busNumber || "Unassigned"}
                       </p>
@@ -301,12 +310,12 @@ export function AdminUsers({ role, title }) {
                             })
                           }
                           aria-label={`Assign bus to ${driver.name}`}
-                          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs"
+                          className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-2.5 text-sm lg:py-2 lg:text-xs"
                         >
                           <option value="">Unassigned</option>
                           {availableBuses.map((bus) => (
                             <option key={bus._id} value={bus._id}>
-                              {bus.busNumber} Â·{" "}
+                              {bus.busNumber} ·{" "}
                               {bus.routeId?.name || "No route"}
                             </option>
                           ))}
@@ -318,13 +327,14 @@ export function AdminUsers({ role, title }) {
                             selectedBusId === assignedBusId
                           }
                           onClick={() => saveDriverAssignment(driver)}
-                          className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"
+                          className="min-h-10 rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white disabled:opacity-40 lg:min-h-0 lg:text-xs"
                         >
-                          {busyDriverId === driver._id ? "Savingâ€¦" : "Save"}
+                          {busyDriverId === driver._id ? "Saving…" : "Save"}
                         </button>
                       </div>
                     </td>
-                    <td className="min-w-40 pr-4 text-sm">
+                    <td className="text-sm lg:table-cell lg:min-w-40 lg:pr-4">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Current trip</span>
                       {driver.currentTrip ? (
                         <>
                           <p className="font-bold text-emerald-700">Active</p>
@@ -338,20 +348,21 @@ export function AdminUsers({ role, title }) {
                         <span className="text-slate-500">No active trip</span>
                       )}
                     </td>
-                    <td className="min-w-36 pr-4 text-xs text-slate-500">
+                    <td className="text-xs text-slate-500 lg:table-cell lg:min-w-36 lg:pr-4">
+                      <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Last activity</span>
                       {driver.lastActivityAt
                         ? new Date(driver.lastActivityAt).toLocaleString()
                         : "No activity recorded"}
                     </td>
-                    <td className="min-w-44 py-3 pr-4">
-                      <div className="flex flex-wrap gap-1.5">
+                    <td className="col-span-2 lg:table-cell lg:min-w-44 lg:py-3 lg:pr-4">
+                      <div className="flex flex-wrap gap-2 lg:gap-1.5">
                         <button
                           type="button"
                           title="Edit driver details"
                           aria-label={`Edit ${driver.name}`}
                           onClick={() => openDialog("edit", driver)}
                           disabled={busyDriverId === driver._id}
-                          className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                          className="rounded-lg border border-slate-200 p-3 text-slate-600 hover:bg-slate-50 disabled:opacity-40 lg:p-2"
                         >
                           <Pencil size={15} />
                         </button>
@@ -361,7 +372,7 @@ export function AdminUsers({ role, title }) {
                           aria-label={`Reset password for ${driver.name}`}
                           onClick={() => openDialog("password", driver)}
                           disabled={busyDriverId === driver._id}
-                          className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                          className="rounded-lg border border-slate-200 p-3 text-slate-600 hover:bg-slate-50 disabled:opacity-40 lg:p-2"
                         >
                           <KeyRound size={15} />
                         </button>
@@ -375,7 +386,7 @@ export function AdminUsers({ role, title }) {
                           aria-label={`${driver.isActive ? "Deactivate" : "Activate"} ${driver.name}`}
                           onClick={() => toggleDriverStatus(driver)}
                           disabled={busyDriverId === driver._id}
-                          className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+                          className="rounded-lg border border-slate-200 p-3 text-slate-600 hover:bg-slate-50 disabled:opacity-40 lg:p-2"
                         >
                           <Power size={15} />
                         </button>
@@ -389,7 +400,7 @@ export function AdminUsers({ role, title }) {
                           aria-label={`Delete ${driver.name}`}
                           onClick={() => removeDriver(driver)}
                           disabled={!canDelete || busyDriverId === driver._id}
-                          className="rounded-lg border border-red-200 p-2 text-red-700 hover:bg-red-50 disabled:opacity-40"
+                          className="rounded-lg border border-red-200 p-3 text-red-700 hover:bg-red-50 disabled:opacity-40 lg:p-2"
                         >
                           <Trash2 size={15} />
                         </button>
@@ -399,10 +410,10 @@ export function AdminUsers({ role, title }) {
                 );
               })}
               {!users.length && (
-                <tr>
+                <tr className="block lg:table-row">
                   <td
                     colSpan={7}
-                    className="p-8 text-center text-sm text-slate-500"
+                    className="block p-8 text-center text-sm text-slate-500 lg:table-cell"
                   >
                     No drivers yet. Add a driver to get started.
                   </td>
@@ -411,8 +422,8 @@ export function AdminUsers({ role, title }) {
             </tbody>
           </AdminTable>
         ) : (
-          <AdminTable>
-            <thead>
+          <AdminTable stackOnMobile>
+            <thead className="hidden lg:table-header-group">
               <tr className="border-b bg-slate-50 text-xs uppercase text-slate-500">
                 <th className="p-4">Name</th>
                 <th>Email</th>
@@ -420,13 +431,25 @@ export function AdminUsers({ role, title }) {
                 <th>Role</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="block lg:table-row-group">
               {users.map((user) => (
-                <tr key={user._id} className="border-b">
-                  <td className="p-4 font-bold">{user.name}</td>
-                  <td>{user.email}</td>
-                  <td>{user.studentId || "â€”"}</td>
-                  <td className="capitalize">{user.role}</td>
+                <tr
+                  key={user._id}
+                  className="grid grid-cols-2 gap-x-3 gap-y-3 border-b p-4 lg:table-row lg:p-0"
+                >
+                  <td className="col-span-2 font-bold lg:table-cell lg:p-4">{user.name}</td>
+                  <td className="col-span-2 min-w-0 break-words text-sm lg:col-span-1 lg:table-cell">
+                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Email</span>
+                    {user.email}
+                  </td>
+                  <td className="text-sm lg:table-cell">
+                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">ID</span>
+                    {user.studentId || "—"}
+                  </td>
+                  <td className="text-sm capitalize lg:table-cell">
+                    <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Role</span>
+                    {user.role}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -439,7 +462,7 @@ export function AdminUsers({ role, title }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="driver-dialog-title"
-            className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -571,7 +594,7 @@ export function AdminUsers({ role, title }) {
                   className="rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50"
                 >
                   {saving
-                    ? "Savingâ€¦"
+                    ? "Saving…"
                     : dialogMode === "create"
                       ? "Create Driver"
                       : dialogMode === "edit"

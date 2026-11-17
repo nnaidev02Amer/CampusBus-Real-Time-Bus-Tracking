@@ -83,17 +83,7 @@ export async function createDriver(req, res, next) {
       role: "driver",
     });
 
-    res.status(201).json({
-      user: {
-        _id: driver._id,
-        name: driver.name,
-        email: driver.email,
-        role: driver.role,
-        phone: driver.phone,
-        assignedBusId: driver.assignedBusId,
-        createdAt: driver.createdAt,
-      },
-    });
+    res.status(201).json({ user: publicDriver(driver) });
   } catch (error) {
     if (error.code === 11000) {
       return res

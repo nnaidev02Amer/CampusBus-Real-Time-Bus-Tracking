@@ -4,6 +4,7 @@ import Layout from "../components/Layout";
 import { API_URL, SOCKET_URL, busApi, routeApi } from "../services/api";
 import { Play, Pause, Square, Gauge } from "lucide-react";
 import MapView from "../components/MapView";
+import { journeyForShift } from "../utils/routePath";
 export default function Simulator() {
   const [buses, setBuses] = useState([]),
     [routes, setRoutes] = useState([]),
@@ -30,11 +31,12 @@ export default function Simulator() {
     };
   }, []);
   const bus = buses.find((b) => b._id === busId),
-    route = routes.find((r) => r._id === bus?.routeId);
+    route = routes.find((r) => r._id === (bus?.routeId?._id || bus?.routeId));
   const activeStops =
     shift === "evening" && route?.eveningStops?.length
       ? route.eveningStops
       : route?.stops || [];
+  const journey = journeyForShift(route, shift);
   const start = async () => {
     const token =
       sessionStorage.getItem("campusbus_token") ||
@@ -135,6 +137,10 @@ export default function Simulator() {
               location={pos}
               stops={activeStops}
               route={activeStops}
+              start={journey.start}
+              destination={journey.destination}
+              roadPath={journey.path}
+              pathStatus={journey.pathStatus}
             />
           </div>
           <div className="space-y-4 rounded-2xl border bg-white p-5 shadow-sm">

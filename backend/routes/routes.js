@@ -7,5 +7,6 @@ r.get("/", c.list);
 r.get("/:id", c.get);
 r.post("/", requireRole("admin"), c.create);
 r.put("/:id", requireRole("admin"), c.update);
+r.post("/:id/recalculate", requireRole("admin"), c.recalculate);
 r.delete("/:id", requireRole("admin"), c.remove);
 export default r;

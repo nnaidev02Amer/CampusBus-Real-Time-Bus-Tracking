@@ -1,0 +1,11 @@
+import { Router } from "express";
+import * as c from "../controllers/notifications.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
+const r = Router();
+r.use(requireAuth, requireRole("student"));
+r.get("/", c.list);
+r.post("/read-all", c.markAllRead);
+r.post("/:id/read", c.markRead);
+r.delete("/", c.clearAll);
+r.delete("/:id", c.remove);
+export default r;

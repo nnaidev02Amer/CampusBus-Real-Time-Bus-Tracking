@@ -2,6 +2,7 @@ import Bus from "../models/Bus.js";
 import Route from "../models/Route.js";
 import Trip from "../models/Trip.js";
 import BusStop from "../models/BusStop.js";
+import { applyPathProgress } from "./pathProgress.js";
 import {
   buildEtas,
   computeStopDelay,
@@ -20,6 +21,15 @@ const STOPPED_SPEED_THRESHOLD_KMH = setting(
 );
 const STOPPED_DURATION_MS = setting("BUS_STOPPED_DURATION_MS", 90000, 1000);
 const STOP_PROXIMITY_METERS = setting("BUS_STOP_PROXIMITY_METERS", 120, 1);
+
+// Device clocks can be wrong; fall back to server time when the reported fix
+// time is invalid or more than 5 minutes away from the server clock.
+export function sanitizeTimestamp(timestamp, receivedAt = new Date()) {
+  const t = timestamp == null ? Number.NaN : new Date(timestamp).getTime();
+  if (!Number.isFinite(t) || Math.abs(t - receivedAt.getTime()) > 5 * 60 * 1000)
+    return new Date(receivedAt);
+  return new Date(t);
+}
 
 export function evaluateStoppedState(speed, previousLowSpeedSince, receivedAt = new Date()) {
   if (speed == null || speed > STOPPED_SPEED_THRESHOLD_KMH) {
@@ -40,7 +50,7 @@ export function evaluateStoppedState(speed, previousLowSpeedSince, receivedAt = 
   };
 }
 
-export async function processLocation(payload) {
+export async function processLocation(payload, source = "driver-gps", options = {}) {
   const {
     busId,
     tripId,
@@ -69,8 +79,13 @@ export async function processLocation(payload) {
     throw Object.assign(new Error("Invalid GPS speed"), { status: 400 });
   }
   const trip = await Trip.findOne({ _id: tripId, busId, status: "active" });
+  let newArrival = null;
   if (!trip)
     throw Object.assign(new Error("Active trip not found"), { status: 403 });
+  if (source === "driver-gps" && trip.isTest)
+    throw Object.assign(new Error("This is a test-mode trip; real GPS is not accepted"), { status: 409 });
+  if (options.requireTestTrip && !trip.isTest)
+    throw Object.assign(new Error("Simulated locations are only accepted for test-mode trips"), { status: 403 });
   const bus = await Bus.findById(busId);
   if (!bus) throw Object.assign(new Error("Bus not found"), { status: 404 });
   const route = await Route.findById(bus.routeId)
@@ -95,8 +110,10 @@ export async function processLocation(payload) {
     speed: currentSpeed,
     heading,
     accuracy,
-    timestamp: new Date(timestamp || Date.now()),
+    timestamp: sanitizeTimestamp(timestamp, receivedAt),
     lowSpeedSince,
+    source: source === "simulator" ? "simulator" : "driver-gps",
+    receivedAt,
   };
 
   const isEvening = trip.shift === "evening";
@@ -119,12 +136,14 @@ export async function processLocation(payload) {
       ? stops
       : geocodedStops;
 
-  const tracking = routeTrackingState(
-    current,
-    stopsToTrack,
-    isStopped,
-    STOP_PROXIMITY_METERS,
-  );
+  const tracking = applyPathProgress({
+    tripId: trip._id,
+    route,
+    shift: trip.shift === "evening" ? "evening" : "morning",
+    stops: stopsToTrack,
+    position: current,
+    tracking: routeTrackingState(current, stopsToTrack, isStopped, STOP_PROXIMITY_METERS),
+  });
   bus.currentLocation = current;
   bus.lastUpdated = receivedAt;
   bus.status = isStopped ? "stopped" : "active";
@@ -145,6 +164,7 @@ export async function processLocation(payload) {
         const d = computeStopDelay(sched.time, receivedAt, receivedAt);
         if (d) delayMinutes = d.diffMinutes;
       }
+      newArrival = { stopId: tracking.currentStop._id, stopName: tracking.currentStop.name };
       trip.stopArrivals.push({
         stopId: tracking.currentStop._id,
         stopName: tracking.currentStop.name,
@@ -182,6 +202,7 @@ export async function processLocation(payload) {
       _id: trip._id,
       busId: trip.busId,
       routeId: trip.routeId,
+      isTest: Boolean(trip.isTest),
       shift: trip.shift,
       startedAt: trip.startedAt,
       stopArrivals: trip.stopArrivals || [],
@@ -196,6 +217,9 @@ export async function processLocation(payload) {
     isStopped,
     isLive: true,
     stale: false,
+    // Server-side hints for the notification service (not used by clients).
+    newArrival,
+    signalWasLost: Boolean(trip.signalLost),
   };
 }
 
@@ -233,12 +257,14 @@ export async function getBusTrackingState(bus, activeTrip) {
 
   const current = bus.currentLocation;
   const isStopped = bus.status === "stopped";
-  const tracking = routeTrackingState(
-    current,
-    stopsToTrack,
-    isStopped,
-    STOP_PROXIMITY_METERS,
-  );
+  const tracking = applyPathProgress({
+    tripId: activeTrip._id,
+    route,
+    shift: isEvening ? "evening" : "morning",
+    stops: stopsToTrack,
+    position: current,
+    tracking: routeTrackingState(current, stopsToTrack, isStopped, STOP_PROXIMITY_METERS),
+  });
 
   const list = speedCache.get(String(bus._id)) || [];
   const etaByStop =

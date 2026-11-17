@@ -15,18 +15,24 @@ import stopRoutes from "./routes/stops.js";
 import tripRoutes from "./routes/trips.js";
 import userRoutes from "./routes/users.js";
 import simulatorRoutes from "./routes/simulator.js";
+import notificationRoutes from "./routes/notifications.js";
+import geocodeRoutes from "./routes/geocode.js";
+import { startSignalMonitor } from "./services/notifications.js";
 import { setupSockets } from "./sockets/index.js";
 import { notFound, errorHandler } from "./middleware/error.js";
 const serverStatusTemplate = await readFile(
   new URL("./views/serverStatus.html", import.meta.url),
   "utf8",
 );
+if (!process.env.JWT_SECRET) {
+  console.error("JWT_SECRET is not set. Add it to backend/.env and restart.");
+  process.exit(1);
+}
 const app = express();
 const server = http.createServer(app);
 const defaultOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  "https://prashanticampusbus.onrender.com",
 ];
 const parseOrigins = (...values) =>
   values
@@ -95,15 +101,18 @@ app.use("/api/stops", stopRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/simulator", simulatorRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/geocode", geocodeRoutes);
 app.use(notFound);
 app.use(errorHandler);
 setupSockets(io);
 const port = Number(process.env.PORT || 5000);
 connectDB()
   .then(() =>
-    server.listen(port, () =>
-      console.log(`CampusBus API listening on ${port}`),
-    ),
+    server.listen(port, () => {
+      console.log(`CampusBus API listening on ${port}`);
+      startSignalMonitor(io);
+    }),
   )
   .catch((err) => {
     console.error(err);

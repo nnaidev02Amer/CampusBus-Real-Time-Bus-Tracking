@@ -1,11 +1,21 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { connectDB } from "./config/db.js";
+import { checkSeedTarget } from "./config/seedGuard.js";
 import User from "./models/User.js";
 import BusStop from "./models/BusStop.js";
 import Route from "./models/Route.js";
 import Bus from "./models/Bus.js";
 import Trip from "./models/Trip.js";
+// Safety guard: runs BEFORE anything connects to or deletes from the database.
+const target = checkSeedTarget(process.env.MONGO_URI);
+if (!target.ok) {
+  console.error(target.reason);
+  process.exit(1);
+}
+console.log(
+  `Seeding database "${target.dbName}"${target.overridden ? " (SEED_CONFIRM_WIPE override)" : ""}: existing users, buses, routes, stops and trips in it will be deleted.`,
+);
 await connectDB();
 await Promise.all([
   User.deleteMany({}),

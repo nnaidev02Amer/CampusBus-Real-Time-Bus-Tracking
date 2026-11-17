@@ -20,13 +20,18 @@ import {
 } from "lucide-react";
 import StatCard from "../components/StatCard";
 import StatusBadge from "../components/StatusBadge";
+import RouteJourneyEditor, { RouteJourneyPanel } from "../components/RouteJourneyEditor";
+import { ErrorState, EmptyState, Skeleton, apiMessage } from "../components/PageState";
 export function AdminDashboard() {
   const [b, setB] = useState([]),
     [t, setT] = useState([]),
     [s, setS] = useState([]),
-    [drivers, setDrivers] = useState([]);
-  const load = () =>
-    Promise.all([
+    [drivers, setDrivers] = useState([]),
+    [loading, setLoading] = useState(true),
+    [loadError, setLoadError] = useState("");
+  const load = () => {
+    setLoadError("");
+    return Promise.all([
       busApi.list(),
       tripApi.active(),
       stopApi.list(),
@@ -36,7 +41,10 @@ export function AdminDashboard() {
       setT(c.data.trips);
       setS(d.data.stops);
       setDrivers(e.data.drivers);
-    });
+    })
+      .catch((error) => setLoadError(apiMessage(error, "Could not load the dashboard.")))
+      .finally(() => setLoading(false));
+  };
   const activeBuses = b.filter((bus) => bus.status === "active").length;
   const onlineBuses = b.filter((bus) => {
     const lastUpdate = bus.lastUpdated || bus.currentLocation?.timestamp;
@@ -47,7 +55,7 @@ export function AdminDashboard() {
     );
   }).length;
   useEffect(() => {
-    load().catch((error) => console.error("Could not load admin dashboard.", error));
+    load();
   }, []);
   return (
     <Layout>
@@ -56,6 +64,8 @@ export function AdminDashboard() {
           <p className="text-sm font-bold text-blue-600">OPERATIONS</p>
           <h1 className="text-3xl font-black">System overview</h1>
         </div>
+        {loading && <Skeleton rows={2} />}
+        {loadError && <ErrorState message={loadError} onRetry={load} />}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
             label="Total buses"
@@ -101,7 +111,9 @@ export function AdminDashboard() {
             <h2 className="font-black">Active buses</h2>
             <button
               onClick={load}
-              className="rounded-xl p-2 hover:bg-slate-100"
+              aria-label="Refresh"
+              title="Refresh"
+              className="rounded-xl p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               <RefreshCw size={17} />
             </button>
@@ -231,7 +243,7 @@ export function AdminBuses() {
         </div>
         <form
           onSubmit={add}
-          className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-4"
+          className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4"
         >
           <input
             required
@@ -278,7 +290,7 @@ export function AdminBuses() {
                 </option>
               ))}
           </select>
-          <button className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 font-bold text-white md:col-span-4">
+          <button className="flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 font-bold text-white sm:col-span-2 lg:col-span-4">
             <Plus size={17} />
             Add bus to fleet
           </button>
@@ -299,8 +311,8 @@ export function AdminBuses() {
             {assignmentError}
           </p>
         )}
-        <AdminTable>
-          <thead>
+        <AdminTable stackOnMobile>
+          <thead className="hidden lg:table-header-group">
             <tr className="border-b bg-slate-50 text-xs uppercase text-slate-500">
               <th className="p-4">Bus</th>
               <th>Registration</th>
@@ -311,12 +323,22 @@ export function AdminBuses() {
               <th />
             </tr>
           </thead>
-          <tbody>
+          <tbody className="block lg:table-row-group">
             {b.map((x) => (
-              <tr key={x._id} className="border-b last:border-0 hover:bg-slate-50/50">
-                <td className="p-4 font-bold text-slate-900">{x.busNumber}</td>
-                <td className="font-mono text-sm text-slate-700">{x.registrationNumber}</td>
-                <td className="min-w-56 py-2 pr-3">
+              <tr
+                key={x._id}
+                className="grid grid-cols-2 gap-x-3 gap-y-3 border-b p-4 last:border-0 hover:bg-slate-50/50 lg:table-row lg:p-0"
+              >
+                <td className="font-bold text-slate-900 lg:table-cell lg:p-4">
+                  <span className="block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Bus</span>
+                  {x.busNumber}
+                </td>
+                <td className="font-mono text-sm text-slate-700 lg:table-cell">
+                  <span className="block font-sans text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Registration</span>
+                  {x.registrationNumber}
+                </td>
+                <td className="col-span-2 lg:table-cell lg:min-w-56 lg:py-2 lg:pr-3">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Assigned route</span>
                   <select
                     value={routeAssignments[x._id] ?? ""}
                     onChange={(e) =>
@@ -326,7 +348,7 @@ export function AdminBuses() {
                       })
                     }
                     aria-label={`Route assigned to ${x.busNumber}`}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2.5 text-sm font-medium text-slate-800 lg:py-1.5 lg:text-xs"
                   >
                     <option value="">No Route Assigned</option>
                     {routes.map((r) => (
@@ -337,7 +359,8 @@ export function AdminBuses() {
                     ))}
                   </select>
                 </td>
-                <td className="min-w-56 py-2 pr-3">
+                <td className="col-span-2 lg:table-cell lg:min-w-56 lg:py-2 lg:pr-3">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Assigned driver</span>
                   <select
                     value={driverAssignments[x._id] ?? ""}
                     onChange={(e) =>
@@ -347,7 +370,7 @@ export function AdminBuses() {
                       })
                     }
                     aria-label={`Driver assigned to ${x.busNumber}`}
-                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800"
+                    className="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-2.5 text-sm font-medium text-slate-800 lg:py-1.5 lg:text-xs"
                   >
                     <option value="">Unassigned</option>
                     {drivers
@@ -366,20 +389,29 @@ export function AdminBuses() {
                       ))}
                   </select>
                 </td>
-                <td>
+                <td className="lg:table-cell">
+                  <span className="mb-1 block text-[10px] font-semibold uppercase text-slate-500 lg:hidden">Status</span>
                   <StatusBadge status={x.status} />
                 </td>
-                <td>
+                <td className="flex items-center justify-end gap-2 lg:table-cell">
                   <button
                     type="button"
                     disabled={savingBusId === x._id}
                     onClick={() => saveBusAssignments(x._id)}
-                    className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+                    className="min-h-10 rounded-lg bg-slate-900 px-4 py-1.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 lg:min-h-0 lg:px-3 lg:text-xs"
                   >
                     {savingBusId === x._id ? "Saving…" : "Save"}
                   </button>
+                  <button
+                    onClick={() => del(x._id)}
+                    title="Delete bus"
+                    aria-label={`Delete ${x.busNumber}`}
+                    className="inline-grid min-h-10 min-w-10 place-items-center rounded-lg text-red-500 hover:bg-red-50 lg:hidden"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                 </td>
-                <td>
+                <td className="hidden lg:table-cell">
                   <button
                     onClick={() => del(x._id)}
                     title="Delete bus"
@@ -391,8 +423,8 @@ export function AdminBuses() {
               </tr>
             ))}
             {!b.length && (
-              <tr>
-                <td colSpan={7} className="p-4 text-center text-sm text-slate-500">
+              <tr className="block lg:table-row">
+                <td colSpan={7} className="block p-4 text-center text-sm text-slate-500 lg:table-cell">
                   No buses in fleet.
                 </td>
               </tr>
@@ -558,6 +590,8 @@ export function AdminRoutes() {
         routeNumber: "",
         direction: "",
         busRegistration: "",
+        start: null,
+        destination: null,
       });
       setCreateDraftStops([]);
       setCreateStopSelect("");
@@ -753,6 +787,20 @@ export function AdminRoutes() {
             />
           </div>
 
+          {/* Journey: start + final destination (search or map click) */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+            <p className="text-xs font-bold text-slate-700">
+              Journey start &amp; final destination (optional - enables the road route)
+            </p>
+            <RouteJourneyEditor
+              value={{ start: newRoute.start || null, destination: newRoute.destination || null }}
+              onChange={(v) => setNewRoute((prev) => ({ ...prev, start: v.start, destination: v.destination }))}
+              previewStops={createDraftStops
+                .map((id) => stops.find((s) => s._id === id))
+                .filter(Boolean)}
+            />
+          </div>
+
           {/* Stops picker for new route */}
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
             <p className="text-xs font-bold text-slate-700">
@@ -789,7 +837,7 @@ export function AdminRoutes() {
                             arr.splice(idx - 1, 0, m);
                             setCreateDraftStops(arr);
                           }}
-                          className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-25"
+                          className="rounded p-2.5 text-slate-600 hover:bg-slate-100 disabled:opacity-25 lg:p-1"
                         >
                           <ArrowUp size={13} />
                         </button>
@@ -802,7 +850,7 @@ export function AdminRoutes() {
                             arr.splice(idx + 1, 0, m);
                             setCreateDraftStops(arr);
                           }}
-                          className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-25"
+                          className="rounded p-2.5 text-slate-600 hover:bg-slate-100 disabled:opacity-25 lg:p-1"
                         >
                           <ArrowDown size={13} />
                         </button>
@@ -813,7 +861,7 @@ export function AdminRoutes() {
                             arr.splice(idx, 1);
                             setCreateDraftStops(arr);
                           }}
-                          className="rounded p-1 text-red-500 hover:bg-red-50"
+                          className="rounded p-2.5 text-red-500 hover:bg-red-50 lg:p-1"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -828,7 +876,7 @@ export function AdminRoutes() {
               <select
                 value={createStopSelect}
                 onChange={(e) => setCreateStopSelect(e.target.value)}
-                className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs"
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs"
               >
                 <option value="">Select an existing stop to add in order…</option>
                 {stops.map((stop) => {
@@ -1091,6 +1139,16 @@ export function AdminRoutes() {
                   </span>
                 </div>
 
+                {/* Journey: start, destination and OSRM road route */}
+                <RouteJourneyPanel
+                  route={r}
+                  onError={setRouteError}
+                  onSaved={async (msg) => {
+                    setRouteSuccess(msg);
+                    await load();
+                  }}
+                />
+
                 {/* Ordered Geocoded Stops Manager */}
                 <div className="mt-1 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1186,7 +1244,7 @@ export function AdminRoutes() {
                                   moveStopInDraft(r._id, isEvening, index, index - 1)
                                 }
                                 title="Move Stop Up"
-                                className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-25"
+                                className="rounded p-2.5 text-slate-600 hover:bg-slate-100 disabled:opacity-25 lg:p-1"
                               >
                                 <ArrowUp size={14} />
                               </button>
@@ -1197,7 +1255,7 @@ export function AdminRoutes() {
                                   moveStopInDraft(r._id, isEvening, index, index + 1)
                                 }
                                 title="Move Stop Down"
-                                className="rounded p-1 text-slate-600 hover:bg-slate-100 disabled:opacity-25"
+                                className="rounded p-2.5 text-slate-600 hover:bg-slate-100 disabled:opacity-25 lg:p-1"
                               >
                                 <ArrowDown size={14} />
                               </button>
@@ -1207,7 +1265,7 @@ export function AdminRoutes() {
                                   removeStopFromDraft(r._id, isEvening, index)
                                 }
                                 title="Remove Stop from Route"
-                                className="rounded p-1 text-red-500 hover:bg-red-50"
+                                className="rounded p-2.5 text-red-500 hover:bg-red-50 lg:p-1"
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -1232,7 +1290,7 @@ export function AdminRoutes() {
                           [r._id]: e.target.value,
                         })
                       }
-                      className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs"
+                      className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs"
                     >
                       <option value="">
                         Select an existing stop to add to {isEvening ? "evening" : "morning"} route…
@@ -1930,7 +1988,7 @@ export function AdminStops() {
                             disabled={index === 0}
                             onClick={() => handleMoveStop(index, index - 1)}
                             title="Move Stop Up"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-200 disabled:opacity-25"
+                            className="rounded p-2.5 text-slate-600 hover:bg-slate-200 disabled:opacity-25 lg:p-1"
                           >
                             <ArrowUp size={14} />
                           </button>
@@ -1939,7 +1997,7 @@ export function AdminStops() {
                             disabled={index === stops.length - 1}
                             onClick={() => handleMoveStop(index, index + 1)}
                             title="Move Stop Down"
-                            className="rounded p-1 text-slate-600 hover:bg-slate-200 disabled:opacity-25"
+                            className="rounded p-2.5 text-slate-600 hover:bg-slate-200 disabled:opacity-25 lg:p-1"
                           >
                             <ArrowDown size={14} />
                           </button>
@@ -1960,7 +2018,7 @@ export function AdminStops() {
                               })
                             }
                             title="Edit stop"
-                            className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+                            className="rounded p-2.5 text-blue-600 hover:bg-blue-50 lg:p-1.5"
                           >
                             <Pencil size={15} />
                           </button>
@@ -1968,7 +2026,7 @@ export function AdminStops() {
                             type="button"
                             onClick={() => handleDeleteStop(s._id, s.name)}
                             title="Delete stop from this route"
-                            className="rounded p-1.5 text-red-500 hover:bg-red-50"
+                            className="rounded p-2.5 text-red-500 hover:bg-red-50 lg:p-1.5"
                           >
                             <Trash2 size={15} />
                           </button>
@@ -2107,22 +2165,52 @@ export function AdminStops() {
 }
 export function AdminTrips() {
   const [trips, setTrips] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const load = () => {
+    setError("");
+    setLoading(true);
+    return tripApi
+      .active()
+      .then((r) => setTrips(r.data.trips))
+      .catch((e) => setError(apiMessage(e, "Could not load trips.")))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => {
-    tripApi.active().then((r) => setTrips(r.data.trips));
+    load();
+    const timer = setInterval(() => tripApi.active().then((r) => setTrips(r.data.trips)).catch(() => {}), 15000);
+    return () => clearInterval(timer);
   }, []);
   return (
     <Layout>
       <div className="space-y-5">
-        <h1 className="text-3xl font-black">Active trips</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-black">Active trips</h1>
+          <button
+            type="button"
+            onClick={load}
+            aria-label="Refresh"
+            title="Refresh"
+            className="rounded-xl p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <RefreshCw size={17} />
+          </button>
+        </div>
+        {loading && !trips.length && <Skeleton rows={2} />}
+        {error && <ErrorState message={error} onRetry={load} />}
         {trips.map((t) => (
           <div
             key={t._id}
-            className="rounded-2xl border bg-white p-5 shadow-sm"
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
           >
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-black">{t.busId?.busNumber}</p>
-                <p className="text-sm text-slate-500">{t.routeId?.name}</p>
+                <p className="text-sm text-slate-500">
+                  {t.routeId?.name}
+                  {t.driverId?.name ? ` · Driver: ${t.driverId.name}` : ""}
+                  {t.shift ? ` · ${t.shift}` : ""}
+                </p>
               </div>
               <StatusBadge status="active" />
             </div>
@@ -2131,10 +2219,8 @@ export function AdminTrips() {
             </p>
           </div>
         ))}
-        {!trips.length && (
-          <div className="rounded-2xl bg-white p-8 text-center text-sm text-slate-500">
-            No active trips.
-          </div>
+        {!loading && !error && !trips.length && (
+          <EmptyState title="No active trips" hint="Trips appear here while a driver is on the road." />
         )}
       </div>
     </Layout>

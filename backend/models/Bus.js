@@ -23,6 +23,8 @@ const schema = new mongoose.Schema(
       accuracy: Number,
       timestamp: Date,
       lowSpeedSince: Date,
+      source: { type: String, enum: ["driver-gps", "simulator"] },
+      receivedAt: Date,
     },
     lastUpdated: Date,
   },

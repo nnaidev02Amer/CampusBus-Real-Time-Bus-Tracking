@@ -149,7 +149,11 @@ export default function Login() {
       const r = await login(form);
       redirectAfterLogin(r.user.role);
     } catch (err) {
-      setError(err.response?.data?.message || "Invalid email or password");
+      setError(
+        err.response
+          ? err.response.data?.message || "Invalid email or password"
+          : "Cannot reach the CampusBus server. Make sure the backend is running and try again.",
+      );
     } finally {
       setLoading(false);
     }

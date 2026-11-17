@@ -34,6 +34,18 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  // Any API call that ends in an unrecoverable 401 (expired/invalid token)
+  // clears the session; ProtectedRoute then redirects to /login.
+  useEffect(() => {
+    const onExpired = () => {
+      if (!localStorage.getItem("campusbus_token") && !sessionStorage.getItem("campusbus_token")) return;
+      fbSignOut(auth).catch(() => {});
+      clearSession();
+    };
+    window.addEventListener("campusbus:session-expired", onExpired);
+    return () => window.removeEventListener("campusbus:session-expired", onExpired);
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
     let initialRestorationDone = false;

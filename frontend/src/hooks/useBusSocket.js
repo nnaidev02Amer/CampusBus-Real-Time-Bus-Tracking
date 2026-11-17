@@ -91,7 +91,7 @@ export function useBusSocket(busId, enabled = true) {
         speed: null,
         isLive: false,
       }));
-      notify("CampusBus", "Your bus trip has started.");
+      // Native alert now comes from the persisted notification (useNotifications).
     });
     socket.on("trip:ended", (data) => {
       setLocation((prev) => ({
@@ -108,7 +108,7 @@ export function useBusSocket(busId, enabled = true) {
         delaysByStop: {},
         isLive: false,
       }));
-      notify("CampusBus", "Your bus trip has ended.");
+      // Native alert now comes from the persisted notification (useNotifications).
     });
     return () => {
       socket.emit("student:untrack-bus", { busId });

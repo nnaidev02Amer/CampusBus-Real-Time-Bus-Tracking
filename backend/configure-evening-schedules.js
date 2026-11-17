@@ -3,7 +3,9 @@ import mongoose from "mongoose";
 import { connectDB } from "./config/db.js";
 import BusStop from "./models/BusStop.js";
 import Route from "./models/Route.js";
+import { assertSafeDatabase } from "./config/dbGuard.js";
 
+assertSafeDatabase("configure-evening-schedules");
 await connectDB();
 
 console.log("Configuring Evening Return Schedules for Bus 07 and Bus 17...");

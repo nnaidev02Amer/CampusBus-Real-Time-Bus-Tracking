@@ -1,10 +1,18 @@
+import 'dotenv/config';
 import http from 'http';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import User from '../models/User.js';
+import { assertSafeDatabase } from "../config/dbGuard.js";
 
-const JWT_SECRET = 'replace-with-a-long-random-secret';
-const MONGO_URI = 'mongodb+srv://ayancoder786_db_user:R36NE6dWCsaHaVXM@cluster0.krvox1f.mongodb.net';
+const JWT_SECRET = process.env.JWT_SECRET;
+const MONGO_URI = process.env.MONGO_URI;
+if (!JWT_SECRET || !MONGO_URI) {
+  console.error('Set JWT_SECRET and MONGO_URI (e.g. in backend/.env) before running this script.');
+  process.exit(1);
+}
+
+assertSafeDatabase("test-pwa-auth-lifecycle");
 
 // Mock localStorage
 class MockLocalStorage {

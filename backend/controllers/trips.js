@@ -1,6 +1,8 @@
 import Trip from "../models/Trip.js";
 import Bus from "../models/Bus.js";
 import { clearSpeedCache } from "../services/location.js";
+import { isTestModeEnabled } from "../services/testMode.js";
+import { notifyTripEnded, notifyTripStarted } from "../services/notifications.js";
 export async function start(req, res, next) {
   try {
     if (req.user?.role !== "driver") {
@@ -14,7 +16,10 @@ export async function start(req, res, next) {
           "No bus is assigned to your driver account. Contact an administrator.",
       });
     }
-    if (!bus.routeId)
+    const testMode = req.body?.testMode === true;
+    if (testMode && !isTestModeEnabled())
+      return res.status(403).json({ message: "Test mode is disabled on this server." });
+    if (!bus.routeId && !testMode)
       return res.status(409).json({
         message:
           "Your assigned bus does not have a route configured. Contact an administrator.",
@@ -28,14 +33,16 @@ export async function start(req, res, next) {
     const trip = await Trip.create({
       busId: bus._id,
       driverId,
-      routeId: bus.routeId,
+      routeId: bus.routeId || undefined,
       shift,
+      isTest: testMode,
     });
     bus.status = "active";
     bus.currentLocation = undefined;
     bus.lastUpdated = new Date();
     await bus.save();
     clearSpeedCache(String(bus._id));
+    await notifyTripStarted(req.app.get("io"), bus, trip);
     req.app
       .get("io")
       ?.to(`bus:${bus._id}`)
@@ -83,6 +90,7 @@ export async function stop(req, res, next) {
         stopArrivals: trip.stopArrivals || [],
       });
     clearSpeedCache(String(trip.busId));
+    await notifyTripEnded(req.app.get("io"), trip);
     res.json({ trip });
   } catch (e) {
     next(e);

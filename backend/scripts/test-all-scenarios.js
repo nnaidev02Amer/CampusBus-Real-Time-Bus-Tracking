@@ -6,6 +6,7 @@ import User from "../models/User.js";
 import Bus from "../models/Bus.js";
 import Trip from "../models/Trip.js";
 import { processLocation } from "../services/location.js";
+import { assertSafeDatabase } from "../config/dbGuard.js";
 
 const BACKEND_URL = "http://localhost:5000";
 
@@ -34,6 +35,7 @@ function request(method, path, body = null, token = null) {
 
 async function run() {
   console.log("=== STARTING 4-SCENARIO TRACKING VALIDATION ===");
+assertSafeDatabase("test-all-scenarios");
   await connectDB();
 
   const admin = await User.findOne({ role: "admin" });

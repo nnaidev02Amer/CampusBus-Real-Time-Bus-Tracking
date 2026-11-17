@@ -9,10 +9,12 @@ export async function requireAuth(req, res, next) {
       return res.status(401).json({ message: "Authentication required" });
     const token = h.slice(7).trim();
     let user = null;
+    let expired = false;
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET);
       user = await User.findById(payload.id).select("-password");
-    } catch {
+    } catch (jwtErr) {
+      expired = jwtErr?.name === "TokenExpiredError";
       try {
         const decoded = await verifyFirebaseToken(token);
         if (decoded?.uid) {
@@ -23,7 +25,11 @@ export async function requireAuth(req, res, next) {
         }
       } catch {}
     }
-    if (!user) return res.status(401).json({ message: "Invalid or expired token" });
+    if (!user)
+      return res.status(401).json({
+        message: expired ? "Session expired. Please sign in again." : "Invalid or expired token",
+        code: expired ? "TOKEN_EXPIRED" : "TOKEN_INVALID",
+      });
     if (user.isActive === false) {
       return res.status(403).json({ message: "This account has been deactivated." });
     }

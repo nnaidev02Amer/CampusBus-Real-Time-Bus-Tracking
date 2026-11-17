@@ -4,10 +4,13 @@ import http from "http";
 import { connectDB } from "../config/db.js";
 import User from "../models/User.js";
 import { getSupabaseDiagnostics } from "../services/supabaseStorage.js";
+import { assertSafeDatabase } from "../config/dbGuard.js";
 
 const BACKEND_URL = "http://localhost:5000";
 
 async function runE2ETest() {
+  // Refuse to touch the real database before doing anything else.
+  assertSafeDatabase("test-photo-upload-e2e");
   console.log("=== SUPABASE PROFILE PHOTO UPLOAD E2E TEST ===");
 
   // 1. Diagnostics check

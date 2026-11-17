@@ -3,7 +3,9 @@ import mongoose from "mongoose";
 import { connectDB } from "./config/db.js";
 import Bus from "./models/Bus.js";
 import Route from "./models/Route.js";
+import { assertSafeDatabase } from "./config/dbGuard.js";
 
+assertSafeDatabase("add-route-02");
 await connectDB();
 
 const scheduledStops = [

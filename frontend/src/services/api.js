@@ -1,34 +1,43 @@
 import axios from "axios";
 import { auth } from "./firebase";
 
-const LOCAL_BACKEND_URL = "http://localhost:5000";
-const PRODUCTION_BACKEND_URL = "https://campusbus-1czm.onrender.com";
-const localHosts = new Set(["localhost", "127.0.0.1", "::1"]);
-
-const isLocalHost =
-  typeof window !== "undefined" && localHosts.has(window.location.hostname);
+// Backend URL resolution (local-only project: there is no hosted fallback).
+//  1. VITE_SOCKET_URL / VITE_API_URL when set (e.g. an HTTPS tunnel in front of the backend).
+//  2. Otherwise the SAME HOSTNAME as the page, on port 5000. So http://localhost:5173 talks to
+//     http://localhost:5000, and a phone opening http://<laptop-ip>:5173 talks to
+//     http://<laptop-ip>:5000, i.e. the laptop's own backend, never a remote server.
+// A loopback URL (localhost / 127.0.0.1) from the env is ignored when the page is opened from
+// another device, because "localhost" would then mean the phone itself.
+const BACKEND_PORT = 5000;
+const loopbackHosts = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+const pageHost =
+  typeof window !== "undefined" && window.location.hostname
+    ? window.location.hostname
+    : "localhost";
+const pageProtocol =
+  typeof window !== "undefined" && window.location.protocol === "https:"
+    ? "https:"
+    : "http:";
+const isLocalHost = loopbackHosts.has(pageHost);
 
 const withoutTrailingSlash = (url) => String(url || "").replace(/\/+$/, "");
+const pointsAtLoopback = (url) => {
+  try {
+    return loopbackHosts.has(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+};
+const usableEnvUrl = (url) =>
+  Boolean(url) && (isLocalHost || !pointsAtLoopback(url));
 
 const resolveBackendUrl = () => {
   const envApi = import.meta.env.VITE_API_URL;
   const envSocket = import.meta.env.VITE_SOCKET_URL;
-
-  if (isLocalHost) {
-    if (envSocket) return withoutTrailingSlash(envSocket);
-    if (envApi) return withoutTrailingSlash(envApi).replace(/\/api$/, "");
-    return LOCAL_BACKEND_URL;
-  }
-
-  // Remote / production host (e.g. prashanticampusbus.onrender.com or mobile LAN):
-  // Filter out any stale localhost build-time environment variables
-  if (envSocket && !envSocket.includes("localhost") && !envSocket.includes("127.0.0.1")) {
-    return withoutTrailingSlash(envSocket);
-  }
-  if (envApi && !envApi.includes("localhost") && !envApi.includes("127.0.0.1")) {
+  if (usableEnvUrl(envSocket)) return withoutTrailingSlash(envSocket);
+  if (usableEnvUrl(envApi))
     return withoutTrailingSlash(envApi).replace(/\/api$/, "");
-  }
-  return PRODUCTION_BACKEND_URL;
+  return `${pageProtocol}//${pageHost}:${BACKEND_PORT}`;
 };
 
 const backendBaseUrl = resolveBackendUrl();
@@ -99,6 +108,17 @@ api.interceptors.response.use(
         // Token refresh failed; proceed to reject error
       }
     }
+    // Still unauthorized after any refresh attempt: the session is dead.
+    const url = originalRequest?.url || "";
+    if (
+      error.response?.status === 401 &&
+      !url.includes("/auth/login") &&
+      !url.includes("/auth/register") &&
+      !url.includes("/auth/firebase") &&
+      typeof window !== "undefined"
+    ) {
+      window.dispatchEvent(new Event("campusbus:session-expired"));
+    }
     return Promise.reject(error);
   },
 );
@@ -124,12 +144,15 @@ export const busApi = {
   assignDriver: (id, driverId) => api.put(`/buses/${id}/driver`, { driverId }),
   remove: (id) => api.delete(`/buses/${id}`),
 };
+// Saving a route may wait on the road-routing service (up to ~8 s).
+const ROUTE_WRITE = { timeout: 30000 };
 export const routeApi = {
   list: () => api.get("/routes"),
   get: (id) => api.get(`/routes/${id}`),
-  create: (d) => api.post("/routes", d),
-  update: (id, d) => api.put(`/routes/${id}`, d),
+  create: (d) => api.post("/routes", d, ROUTE_WRITE),
+  update: (id, d) => api.put(`/routes/${id}`, d, ROUTE_WRITE),
   remove: (id) => api.delete(`/routes/${id}`),
+  recalculate: (id) => api.post(`/routes/${id}/recalculate`, null, ROUTE_WRITE),
 };
 export const stopApi = {
   list: (params) => api.get("/stops", { params }),
@@ -143,6 +166,17 @@ export const tripApi = {
   stop: (d, config) => api.post("/trips/stop", d, config),
   active: () => api.get("/trips/active"),
   get: (id) => api.get(`/trips/${id}`),
+};
+export const geocodeApi = {
+  search: (q) => api.get("/geocode/search", { params: { q } }),
+  reverse: (lat, lng) => api.get("/geocode/reverse", { params: { lat, lng } }),
+};
+export const notificationApi = {
+  list: (limit = 50) => api.get("/notifications", { params: { limit } }),
+  markRead: (id) => api.post(`/notifications/${id}/read`),
+  markAllRead: () => api.post("/notifications/read-all"),
+  remove: (id) => api.delete(`/notifications/${id}`),
+  clear: () => api.delete("/notifications"),
 };
 export const userApi = {
   list: (role) => api.get("/users", { params: role ? { role } : {} }),

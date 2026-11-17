@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import Bus from "../models/Bus.js";
 import Trip from "../models/Trip.js";
+import { notifyTripEnded, notifyTripStarted } from "../services/notifications.js";
 const r = Router();
 r.use(requireAuth, requireRole("admin"));
 r.post("/start", async (req, res, next) => {
@@ -21,6 +22,7 @@ r.post("/start", async (req, res, next) => {
     bus.currentLocation = undefined;
     bus.lastUpdated = new Date();
     await bus.save();
+    await notifyTripStarted(req.app.get("io"), bus, trip);
     req.app
       ?.get("io")
       ?.to(`bus:${bus._id}`)
@@ -58,6 +60,7 @@ r.post("/stop", async (req, res, next) => {
         endedAt: trip.endedAt,
         stopArrivals: trip.stopArrivals || [],
       });
+    await notifyTripEnded(req.app.get("io"), trip);
     res.json({ trip });
   } catch (e) {
     next(e);

@@ -1,17 +1,100 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import Layout from "../components/Layout";
-import { routeApi } from "../services/api";
+import { Link } from "react-router-dom";
+import StatusBadge from "../components/StatusBadge";
+import { busApi, routeApi } from "../services/api";
 export { AdminDashboard, AdminBuses, AdminRoutes, AdminStops, AdminTrips } from "./AdminOperations";
 export { AdminUsers } from "./AdminUsers";
 export function StudentBuses() {
+  const [buses, setBuses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    busApi
+      .list()
+      .then((r) => !cancelled && setBuses(r.data.buses))
+      .catch(
+        (err) =>
+          !cancelled &&
+          setError(err.response?.data?.message || "Could not load buses. Check that the backend is running."),
+      )
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
   return (
     <Layout>
-      <div>
-        <h1 className="text-3xl font-black">Buses</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Available buses are shown on your dashboard.
-        </p>
+      <div className="space-y-5">
+        <div>
+          <h1 className="text-3xl font-black">Buses</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            All campus buses. Open a bus to track it live on your dashboard.
+          </p>
+        </div>
+
+        {loading && <p className="text-sm text-slate-500">Loading buses…</p>}
+
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            {error}{" "}
+            <button type="button" className="font-bold underline" onClick={() => setReloadKey((k) => k + 1)}>
+              Retry
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && !buses.length && (
+          <p className="text-sm text-slate-500">No buses available yet.</p>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {buses.map((bus) => (
+            <section
+              key={bus._id}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h2 className="truncate text-xl font-black">{bus.busNumber}</h2>
+                  <p className="text-xs text-slate-500">{bus.registrationNumber}</p>
+                </div>
+                <StatusBadge status={bus.status} />
+              </div>
+              <dl className="mt-4 space-y-1.5 text-sm">
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Route</dt>
+                  <dd className="text-right font-semibold">
+                    {bus.routeId?.direction || bus.routeId?.name || "Not assigned"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-500">Driver</dt>
+                  <dd className="text-right font-semibold">{bus.driverId?.name || "Not assigned"}</dd>
+                </div>
+              </dl>
+              <div className="mt-4 flex items-center justify-between">
+                <Link
+                  to={`/student/dashboard?bus=${bus._id}`}
+                  className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white dark:bg-blue-600"
+                >
+                  Track this bus
+                </Link>
+                {String(user?.assignedBusId) === String(bus._id) && (
+                  <span className="text-xs font-bold text-blue-700 dark:text-blue-400">Your bus</span>
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     </Layout>
   );
@@ -34,9 +117,27 @@ export function StudentRoutes() {
   const [routes, setRoutes] = useState([]);
   const [shift, setShift] = useState("morning");
 
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+
   useEffect(() => {
-    routeApi.list().then((r) => setRoutes(r.data.routes));
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    routeApi
+      .list()
+      .then((r) => !cancelled && setRoutes(r.data.routes))
+      .catch(
+        (err) =>
+          !cancelled &&
+          setError(err.response?.data?.message || "Could not load routes. Check that the backend is running."),
+      )
+      .finally(() => !cancelled && setLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   return (
     <Layout>
@@ -182,7 +283,16 @@ export function StudentRoutes() {
             </section>
           );
         })}
-        {!routes.length && (
+        {loading && <p className="text-sm text-slate-500">Loading routes…</p>}
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            {error}{" "}
+            <button type="button" className="font-bold underline" onClick={() => setReloadKey((k) => k + 1)}>
+              Retry
+            </button>
+          </div>
+        )}
+        {!loading && !error && !routes.length && (
           <p className="text-sm text-slate-500">No routes available.</p>
         )}
       </div>
@@ -190,17 +300,4 @@ export function StudentRoutes() {
   );
 }
 export { default as Profile } from "./Profile";
-export function DriverDashboard() {
-  return (
-    <Layout>
-      <div className="rounded-2xl bg-slate-900 p-7 text-white">
-        <p className="text-sm font-bold text-blue-300">DRIVER CONSOLE</p>
-        <h1 className="mt-2 text-3xl font-black">Ready to drive?</h1>
-        <p className="mt-2 max-w-lg text-slate-300">
-          Start a trip from the Trip page. Your device GPS will be streamed to
-          students tracking your bus.
-        </p>
-      </div>
-    </Layout>
-  );
-}
+export { default as DriverDashboard } from "./DriverDashboard";

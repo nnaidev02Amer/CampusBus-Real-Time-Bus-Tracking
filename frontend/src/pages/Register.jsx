@@ -140,7 +140,11 @@ export default function Register() {
       });
       nav("/student/dashboard", { replace: true });
     } catch (err) {
-      setError(err.response?.data?.message || "Unable to create account.");
+      setError(
+        err.response
+          ? err.response.data?.message || "Unable to create account."
+          : "Cannot reach the CampusBus server. Make sure the backend is running and try again.",
+      );
     } finally {
       setLoading(false);
     }
